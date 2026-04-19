@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Real E-Commerce Integration (INR)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#080808; --surface:#111; --surface2:#161616;
+      --border:#1e1e1e; --text:#e8e8e8; --muted:#555;
+      --accent:#a8ff78; --danger:#ff6b6b;
+    }
+    body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; }
+    * { scrollbar-width:thin; scrollbar-color:#1e1e1e transparent; }
+    *::-webkit-scrollbar { width:4px; height:4px; }
+    *::-webkit-scrollbar-thumb { background:#1e1e1e; border-radius:4px; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes popIn { 0%{transform:scale(0.9);opacity:0} 100%{transform:scale(1);opacity:1} }
+    .product-img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.3s ease; }
+    .card:hover .product-img { transform: scale(1.08); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useContext, createContext, useReducer, useMemo } = React;
+
+// ── CONTEXT & STATE ──────────────────────────────────────────────
+const AppCtx = createContext();
+
+function cartReducer(state, action) {
+  switch (action.type) {
+    case 'ADD': {
+      const ex = state.find(i => i.id === action.item.id);
+      if (ex) return state.map(i => i.id === action.item.id ? {...i, qty: i.qty+1} : i);
+      return [...state, {...action.item, qty:1}];
+    }
+    case 'REMOVE': return state.filter(i => i.id !== action.id);
+    case 'QTY': return state.map(i => i.id === action.id ? {...i, qty: Math.max(1, action.qty)} : i);
+    case 'CLEAR': return [];
+    default: return state;
+  }
+}
+
+// Format INR Helper
+const formatINR = (amount) => {
+  return "₹" + Math.round(amount).toLocaleString('en-IN');
+};
+
+const S = {
+  nav: { position:'fixed', top:0, width:'100%', zIndex:999, background:'rgba(8,8,8,0.9)', backdropFilter:'blur(12px)', borderBottom:'1px solid #1e1e1e', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 5%', height:60 },
+  logo: { fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.1rem', color:'#a8ff78', cursor:'pointer' },
+  page: { paddingTop:80, minHeight:'100vh', maxWidth: 1200, margin: '0 auto' },
+  btn: { background:'#a8ff78', border:'none', borderRadius:8, padding:'10px 20px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.85rem', cursor:'pointer', color:'#000', transition:'transform 0.15s, box-shadow 0.15s' },
+  btnOut: { background:'none', border:'1px solid #1e1e1e', borderRadius:8, padding:'10px 20px', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.85rem', cursor:'pointer', color:'#e8e8e8', transition:'border-color 0.2s' },
+  inp: { background:'#0d0d0d', border:'1px solid #1e1e1e', color:'#e8e8e8', fontFamily:"'DM Sans',sans-serif", fontSize:'0.92rem', padding:'12px 16px', borderRadius:8, outline:'none', width:'100%' },
+  card: { background:'#111', border:'1px solid #1e1e1e', borderRadius:14 },
+  muted: { color:'#555', fontSize:'0.85rem' },
+  label: { fontFamily:"'JetBrains Mono',monospace", fontSize:'0.68rem', color:'#a8ff78', letterSpacing:'0.1em' },
+};
+
+function Stars({ r }) {
+  if (!r) return null;
+  return <span style={{color:'#fbbf24',fontSize:'0.8rem'}}>
+    {'★'.repeat(Math.round(r))}{'☆'.repeat(5-Math.round(r))}
+  </span>;
+}
+
+// ── AUTH SCREEN ──────────────────────────────────────────────────
+function AuthScreen() {
+  const { setUser } = useContext(AppCtx);
+  const [tab, setTab] = useState('login');
+  const [form, setForm] = useState({ name:'', email:'', password:'' });
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 1200));
+    setLoading(false);
+    setUser({ name: form.name || 'Shopper', email: form.email || 'demo@user.com' });
+  };
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', padding:24, background:'#080808' }}>
+      <div style={{...S.card, padding:'36px', width:'100%', maxWidth:400, boxShadow:'0 24px 80px rgba(0,0,0,0.6)', animation:'fadeUp 0.4s ease'}}>
+        <div style={{ fontFamily:"'Syne',sans-serif", fontSize:'1.5rem', fontWeight:800, marginBottom:4 }}>🛍️ ReactStore</div>
+        <p style={S.muted}>India's Premium Demo Store</p>
+        
+        <div style={{ display:'flex', gap:8, marginBottom:24, marginTop: 20 }}>
+          {['login','register'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ flex:1, padding:'10px', borderRadius:8, cursor:'pointer', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.85rem',
+                background: tab===t ? '#a8ff78' : 'none', color: tab===t ? '#000' : '#555', border: tab===t ? 'none' : '1px solid #1e1e1e' }}>
+              {t === 'login' ? 'Sign In' : 'Register'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'register' && (
+          <div style={{ marginBottom:14 }}><input style={S.inp} placeholder="Full Name" value={form.name} onChange={e => setForm(f => ({...f, name:e.target.value}))} /></div>
+        )}
+        <div style={{ marginBottom:14 }}><input style={S.inp} type="email" placeholder="Email" value={form.email} onChange={e => setForm(f => ({...f, email:e.target.value}))} /></div>
+        <div style={{ marginBottom:24 }}><input style={S.inp} type="password" placeholder="Password" value={form.password} onChange={e => setForm(f => ({...f, password:e.target.value}))} /></div>
+
+        <button style={{...S.btn, width:'100%', padding:'13px', background: loading ? '#3a5c2a' : '#a8ff78'}} onClick={submit} disabled={loading}>
+          {loading ? '⏳ Authenticating...' : (tab === 'login' ? 'Secure Login →' : 'Create Account →')}
+        </button>
+
+        <div style={{...S.muted, textAlign:'center', marginTop:16, fontSize:'0.78rem', cursor:'pointer', color:'#a8ff78'}}
+          onClick={() => setUser({ name:'Demo User', email:'demo@jagesh.dev' })}>
+          → Skip and continue as Guest
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PRODUCT LISTING (WITH REAL API) ──────────────────────────────
+function Store() {
+  const { dispatch } = useContext(AppCtx);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [cat, setCat] = useState('All');
+  const [added, setAdded] = useState({});
+
+  useEffect(() => {
+    fetch('https://fakestoreapi.com/products')
+      .then(res => res.json())
+      .then(data => {
+        // Convert USD to INR (Approx Exchange Rate: 83)
+        const convertedData = data.map(p => ({
+          ...p,
+          price: p.price * 83 
+        }));
+        setProducts(convertedData);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch products", err);
+        setLoading(false);
+      });
+  }, []);
+
+  const categories = ['All', ...new Set(products.map(p => p.category))];
+
+  const filteredProducts = useMemo(() =>
+    products.filter(p =>
+      (cat === 'All' || p.category === cat) &&
+      p.title.toLowerCase().includes(search.toLowerCase())
+    ), [cat, search, products]);
+
+  const addToCart = (p) => {
+    dispatch({ type:'ADD', item: p });
+    setAdded(a => ({...a, [p.id]:true}));
+    setTimeout(() => setAdded(a => ({...a, [p.id]:false})), 1000);
+  };
+
+  if (loading) return (
+    <div style={{...S.page, padding:'80px 5%', display:'flex', justifyContent:'center', alignItems:'center'}}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:40, height:40, border:'3px solid #1e1e1e', borderTopColor:'#a8ff78', borderRadius:'50%', animation:'spin 1s linear infinite', margin:'0 auto 16px' }}/>
+        <p style={{ fontFamily:"'JetBrains Mono',monospace", color:'#a8ff78' }}>Fetching products from API...</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{...S.page, padding:'80px 5% 60px'}}>
+      
+      {/* Filters */}
+      <div style={{ marginBottom:32, display:'flex', flexWrap:'wrap', gap:12, alignItems:'center' }}>
+        <input style={{...S.inp, maxWidth:300}} placeholder="🔍 Search products..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {categories.map(c => (
+            <button key={c} onClick={() => setCat(c)}
+              style={{ ...S.btnOut, padding:'8px 16px', fontSize:'0.78rem', textTransform:'capitalize',
+                borderColor: cat===c ? '#a8ff78' : '#1e1e1e', color: cat===c ? '#a8ff78' : '#555' }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))', gap:24 }}>
+        {filteredProducts.map(p => (
+          <div key={p.id} className="card" style={{...S.card, padding:'22px', display:'flex', flexDirection:'column', animation:'fadeUp 0.4s ease'}}>
+            
+            <div style={{ background:'#fff', borderRadius:'8px', padding:'16px', height:'200px', display:'flex', justifyContent:'center', alignItems:'center', marginBottom:'16px' }}>
+              <img src={p.image} alt={p.title} className="product-img" />
+            </div>
+            
+            <div style={{ flex: 1 }}>
+              <div style={{...S.label, marginBottom:8, textTransform:'capitalize'}}>{p.category}</div>
+              <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.95rem', marginBottom:6, lineHeight:1.3,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {p.title}
+              </div>
+              
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:14 }}>
+                <Stars r={p.rating.rate} />
+                <span style={{...S.muted, fontSize:'0.72rem'}}>({p.rating.count} reviews)</span>
+              </div>
+            </div>
+
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto', paddingTop:'16px' }}>
+              <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.3rem' }}>{formatINR(p.price)}</div>
+              <button style={{...S.btn, padding:'9px 16px', fontSize:'0.8rem', background: added[p.id] ? '#4ade80' : '#a8ff78'}} onClick={() => addToCart(p)}>
+                {added[p.id] ? '✓ Added' : '+ Cart'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CART MANAGEMENT ──────────────────────────────────────────────
+function Cart() {
+  const { cart, dispatch, setPage } = useContext(AppCtx);
+  
+  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const shipping = subtotal > 999 ? 0 : 99; // Free shipping over ₹999
+  const tax = subtotal * 0.18; // 18% GST
+  const total = subtotal + shipping + tax;
+
+  if (!cart.length) return (
+    <div style={{...S.page, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', gap:16}}>
+      <div style={{ fontSize:'4rem' }}>🛒</div>
+      <div style={{ fontFamily:"'Syne',sans-serif", fontSize:'1.8rem', fontWeight:800 }}>Your Cart is Empty</div>
+      <div style={S.muted}>Looks like you haven't added anything yet.</div>
+      <button style={S.btn} onClick={() => setPage('store')}>Browse Store →</button>
+    </div>
+  );
+
+  return (
+    <div style={{...S.page, padding:'80px 5% 60px'}}>
+      <h2 style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.8rem', marginBottom:28 }}>
+        Shopping Cart <span style={S.label}>({cart.length} items)</span>
+      </h2>
+      
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:32, alignItems:'start' }}>
+        
+        {/* Cart Items List */}
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          {cart.map(item => (
+            <div key={item.id} style={{...S.card, padding:'16px', display:'flex', alignItems:'center', gap:20, animation:'slideIn 0.3s ease'}}>
+              <div style={{ background:'#fff', width:80, height:80, borderRadius:8, display:'flex', justifyContent:'center', padding:8, flexShrink:0 }}>
+                <img src={item.image} style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain' }} />
+              </div>
+              
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.95rem', marginBottom:4,
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'300px' }}>{item.title}</div>
+                <div style={S.label}>{formatINR(item.price)} each</div>
+              </div>
+              
+              <div style={{ display:'flex', alignItems:'center', gap:10, background:'#161616', padding:'6px', borderRadius:8, border:'1px solid #1e1e1e' }}>
+                <button style={{ background:'none', border:'none', color:'#a8ff78', cursor:'pointer', fontSize:'1.2rem', width:24 }} onClick={() => dispatch({ type:'QTY', id:item.id, qty:item.qty-1 })}>−</button>
+                <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, minWidth:24, textAlign:'center' }}>{item.qty}</span>
+                <button style={{ background:'none', border:'none', color:'#a8ff78', cursor:'pointer', fontSize:'1.2rem', width:24 }} onClick={() => dispatch({ type:'QTY', id:item.id, qty:item.qty+1 })}>+</button>
+              </div>
+              
+              <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, minWidth:80, textAlign:'right', fontSize:'1.1rem' }}>
+                {formatINR(item.price * item.qty)}
+              </div>
+              
+              <button style={{ background:'rgba(255,107,107,0.1)', border:'none', color:'#ff6b6b', borderRadius:8, width:36, height:36, cursor:'pointer', fontSize:'1.1rem', display:'flex', alignItems:'center', justifyContent:'center' }}
+                onClick={() => dispatch({ type:'REMOVE', id:item.id })}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Order Summary */}
+        <div style={{...S.card, padding:'28px', position:'sticky', top:80}}>
+          <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.2rem', marginBottom:24 }}>Order Summary</div>
+          
+          {[
+            ['Subtotal', formatINR(subtotal)],
+            ['Shipping', shipping === 0 ? 'Free' : formatINR(shipping)],
+            ['GST (18%)', formatINR(tax)],
+          ].map(([k, v]) => (
+            <div key={k} style={{ display:'flex', justifyContent:'space-between', marginBottom:14, color:'#888', fontSize:'0.9rem' }}>
+              <span>{k}</span><span style={{ color:'#e8e8e8' }}>{v}</span>
+            </div>
+          ))}
+          
+          <div style={{ borderTop:'1px solid #1e1e1e', margin:'20px 0', paddingTop:20, display:'flex', justifyContent:'space-between', fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.3rem' }}>
+            <span>Total</span>
+            <span style={{ color:'#a8ff78' }}>{formatINR(total)}</span>
+          </div>
+          
+          <button style={{...S.btn, width:'100%', padding:16, fontSize:'1rem', marginBottom:12}} onClick={() => setPage('checkout')}>
+            Proceed to Checkout →
+          </button>
+          <button style={{...S.btnOut, width:'100%', padding:12}} onClick={() => setPage('store')}>
+            Continue Shopping
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SECURE PAYMENT MOCK ──────────────────────────────────────────
+function Checkout() {
+  const { cart, dispatch, setPage, user } = useContext(AppCtx);
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: user?.name||'', email: user?.email||'', address:'', phone:'' });
+  
+  // Payment Gateway Modal State
+  const [showGateway, setShowGateway] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const shipping = subtotal > 999 ? 0 : 99;
+  const tax = subtotal * 0.18;
+  const total = subtotal + shipping + tax;
+
+  const simulatePayment = async () => {
+    setProcessing(true);
+    // Simulate API call to payment gateway
+    await new Promise(r => setTimeout(r, 2000));
+    setProcessing(false);
+    setShowGateway(false);
+    setDone(true);
+    dispatch({ type:'CLEAR' });
+  };
+
+  if (done) return (
+    <div style={{...S.page, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', gap:16, animation:'fadeUp 0.5s ease'}}>
+      <div style={{ fontSize:'4rem', background:'#4ade80', width:100, height:100, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>✅</div>
+      <div style={{ fontFamily:"'Syne',sans-serif", fontSize:'2.2rem', fontWeight:800, marginTop:16 }}>Payment Successful!</div>
+      <div style={S.muted}>Your order has been confirmed and is being processed.</div>
+      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'0.9rem', color:'#a8ff78', background:'rgba(168,255,120,0.08)', border:'1px dashed rgba(168,255,120,0.3)', padding:'12px 24px', borderRadius:8, marginTop:8 }}>
+        Order ID: IND-{Math.random().toString(36).substr(2,9).toUpperCase()}
+      </div>
+      <button style={{...S.btn, marginTop:16}} onClick={() => setPage('store')}>Continue Shopping</button>
+    </div>
+  );
+
+  return (
+    <div style={{...S.page, padding:'80px 5% 60px', maxWidth:600, margin:'0 auto'}}>
+      
+      {/* MOCK PAYMENT GATEWAY OVERLAY */}
+      {showGateway && (
+        <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.85)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(5px)' }}>
+          <div style={{ background:'#111', border:'1px solid #1e1e1e', padding:32, borderRadius:16, width:'100%', maxWidth:400, animation:'popIn 0.3s ease', textAlign:'center' }}>
+            <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.4rem', marginBottom:8 }}>Test Payment Gateway</div>
+            <p style={{ color:'#888', fontSize:'0.85rem', marginBottom:24 }}>Choose a simulated payment method to complete your mock order.</p>
+            
+            <div style={{ fontSize:'2rem', fontFamily:"'Syne',sans-serif", fontWeight:800, color:'#a8ff78', marginBottom:24 }}>
+              {formatINR(total)}
+            </div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <button style={{...S.btn, width:'100%', padding:14, background:'#4ade80', display:'flex', justifyContent:'center', alignItems:'center', gap:8}} onClick={simulatePayment} disabled={processing}>
+                {processing ? <span style={{ animation:'spin 1s linear infinite' }}>⏳</span> : '📱'} 
+                {processing ? 'Processing...' : 'Pay with UPI'}
+              </button>
+              <button style={{...S.btnOut, width:'100%', padding:14, display:'flex', justifyContent:'center', alignItems:'center', gap:8}} onClick={simulatePayment} disabled={processing}>
+                💳 Pay via Credit / Debit Card
+              </button>
+              <button style={{ background:'none', border:'none', color:'#ff6b6b', marginTop:12, cursor:'pointer', fontSize:'0.85rem' }} onClick={() => setShowGateway(false)} disabled={processing}>
+                Cancel Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h2 style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.8rem', textAlign:'center', marginBottom:32 }}>Checkout</h2>
+      
+      <div style={{...S.card, padding:'32px'}}>
+        {step === 1 && (
+          <div style={{ animation: 'slideIn 0.3s ease' }}>
+            <h3 style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, marginBottom:20, color:'#a8ff78' }}>Shipping Details</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <input style={S.inp} placeholder="Full Name" value={form.name} onChange={e => setForm(f => ({...f, name:e.target.value}))} />
+              <input style={S.inp} placeholder="Phone Number" value={form.phone} onChange={e => setForm(f => ({...f, phone:e.target.value}))} />
+              <textarea style={{...S.inp, resize:'vertical', minHeight:100}} placeholder="Full Delivery Address (India)" value={form.address} onChange={e => setForm(f => ({...f, address:e.target.value}))} />
+            </div>
+            <button style={{...S.btn, width:'100%', marginTop:24, padding:14}} onClick={() => setStep(2)}>Continue to Review →</button>
+          </div>
+        )}
+        
+        {step === 2 && (
+          <div style={{ animation: 'slideIn 0.3s ease' }}>
+            <h3 style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, marginBottom:20, color:'#a8ff78' }}>Review & Pay</h3>
+            
+            <div style={{ background:'rgba(168,255,120,0.05)', padding:20, borderRadius:8, marginBottom:24 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
+                <span style={{ color:'#888' }}>Total Amount</span>
+                <span style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:'1.2rem', color:'#e8e8e8' }}>
+                  {formatINR(total)}
+                </span>
+              </div>
+              <div style={{ fontSize:'0.8rem', color:'#555', borderTop:'1px solid #1e1e1e', paddingTop:12 }}>
+                Shipping to: {form.name} <br/> {form.address || 'No address provided'}
+              </div>
+            </div>
+
+            <div style={{ display:'flex', gap:12 }}>
+              <button style={{...S.btnOut, padding:14}} onClick={() => setStep(1)}>← Back</button>
+              <button style={{...S.btn, flex:1, padding:14}} onClick={() => setShowGateway(true)}>
+                Proceed to Pay
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── NAVIGATION ───────────────────────────────────────────────────
+function Navbar() {
+  const { page, setPage, cart, user, setUser } = useContext(AppCtx);
+  const count = cart.reduce((s, i) => s + i.qty, 0);
+  
+  return (
+    <nav style={S.nav}>
+      <div style={S.logo} onClick={() => setPage('store')}>🛍️ ReactStore</div>
+      <div style={{ display:'flex', gap:20, alignItems:'center' }}>
+        <span style={{...S.muted, fontFamily:"'JetBrains Mono',monospace", display: window.innerWidth < 600 ? 'none' : 'block'}}>
+          Hi, {user.name}
+        </span>
+        <button style={{...S.btnOut, border:'none', padding:0, color: page==='store' ? '#a8ff78' : '#e8e8e8'}} onClick={() => setPage('store')}>Store</button>
+        
+        <button style={{ background:'#161616', border:'1px solid #2a2a2a', borderRadius:8, padding:'8px 16px', cursor:'pointer', color:'#e8e8e8', fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'0.85rem', display:'flex', alignItems:'center', gap:8, transition:'border-color 0.2s' }}
+          onClick={() => setPage('cart')}
+          onMouseEnter={e=>e.currentTarget.style.borderColor='#a8ff78'}
+          onMouseLeave={e=>e.currentTarget.style.borderColor='#2a2a2a'}>
+          🛒 Cart
+          <span style={{ background:'#a8ff78', color:'#000', borderRadius:'12px', padding:'2px 8px', fontSize:'0.7rem', fontFamily:"'JetBrains Mono',monospace" }}>
+            {count}
+          </span>
+        </button>
+        
+        <button style={{ background:'none', border:'none', cursor:'pointer', color:'#ff6b6b', fontSize:'0.85rem', fontFamily:"'Syne',sans-serif", fontWeight:700 }} onClick={() => setUser(null)}>Logout</button>
+      </div>
+    </nav>
+  );
+}
+
+// ── MAIN APP ROOT ────────────────────────────────────────────────
+function App() {
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState('store');
+  const [cart, dispatch] = useReducer(cartReducer, []);
+
+  // Protect the app - force login first
+  if (!user) return (
+    <AppCtx.Provider value={{ setUser }}>
+      <AuthScreen/>
+    </AppCtx.Provider>
+  );
+
+  return (
+    <AppCtx.Provider value={{ user, setUser, cart, dispatch, page, setPage }}>
+      <Navbar/>
+      {page === 'store' && <Store/>}
+      {page === 'cart' && <Cart/>}
+      {page === 'checkout' && <Checkout/>}
+    </AppCtx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
